@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sobriety Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white flex flex-col items-center min-h-screen p-6">
+
+  <h1 class="text-3xl font-bold mb-6">Sobriety Tracker</h1>
+
+  <!-- Login Section -->
+  <div id="auth-section" class="bg-gray-800 p-4 rounded-xl w-full max-w-md mb-6">
+    <h2 class="text-xl font-semibold mb-4">Login</h2>
+    <input id="email" type="email" placeholder="Email"
+      class="w-full p-2 mb-2 rounded text-black" />
+    <input id="password" type="password" placeholder="Password"
+      class="w-full p-2 mb-2 rounded text-black" />
+    <button id="loginBtn"
+      class="w-full bg-blue-600 hover:bg-blue-700 p-2 rounded mb-2">Login</button>
+    <button id="logoutBtn"
+      class="w-full bg-red-600 hover:bg-red-700 p-2 rounded hidden">Logout</button>
+    <p id="loginStatus" class="text-sm mt-2 text-gray-400"></p>
+  </div>
+
+  <!-- Timers -->
+  <div id="timers" class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl"></div>
+
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+    // 🔥 Replace with your Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyC3Ym6AFZ510Apn3Fe5rjwCGjL8dbV4nJw",
+      authDomain: "sobriety-tracker-53d88.firebaseapp.com",
+      projectId: "sobriety-tracker-53d88",
+      storageBucket: "sobriety-tracker-53d88.firebasestorage.app",
+      messagingSenderId: "383822240935",
+      appId: "1:383822240935:web:4b195d4594215f3d3acf82",
+      measurementId: "G-Y9GWV4PL75",
+      databaseURL: "https://sobriety-tracker-53d88-default-rtdb.firebaseio.com/"
+    };
+
+    // Init
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getDatabase(app);
+
+    const users = {
+      "shiv@tracker.com": "Shiv",
+      "aniruddh@tracker.com": "Aniruddh",
+      "garvit@tracker.com": "Garvit",
+      "prajwal@tracker.com": "Prajwal",
+      "satwik@tracker.com": "Satwik"
+    };
+
+    const timersDiv = document.getElementById("timers");
+    const loginBtn = document.getElementById("loginBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const loginStatus = document.getElementById("loginStatus");
+
+    // Build UI
+    Object.entries(users).forEach(([email, name]) => {
+      const card = document.createElement("div");
+      card.className = "bg-gray-800 p-4 rounded-xl shadow-lg";
+      card.id = `card-${email}`;
+
+      card.innerHTML = `
+        <h2 class="text-xl font-bold mb-4">${name}</h2>
+        <div class="mb-4">
+          <p class="text-sm text-gray-400">Smoke Timer</p>
+          <p id="smoke-${email}" class="text-2xl font-mono">--:--:--</p>
+          <input type="datetime-local" id="smoke-input-${email}" class="hidden mt-2 p-2 rounded text-black"/>
+          <button id="smoke-btn-${email}" class="hidden bg-blue-600 hover:bg-blue-700 mt-2 p-2 rounded">Reset Smoke</button>
+        </div>
+        <div>
+          <p class="text-sm text-gray-400">Drink Timer</p>
+          <p id="drink-${email}" class="text-2xl font-mono">--:--:--</p>
+          <input type="datetime-local" id="drink-input-${email}" class="hidden mt-2 p-2 rounded text-black"/>
+          <button id="drink-btn-${email}" class="hidden bg-blue-600 hover:bg-blue-700 mt-2 p-2 rounded">Reset Drink</button>
+        </div>
+      `;
+      timersDiv.appendChild(card);
+    });
+
+    // Format elapsed time
+    function formatElapsed(ms) {
+      const totalSeconds = Math.floor(ms / 1000);
+      const h = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+      const m = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+      const s = String(totalSeconds % 60).padStart(2, "0");
+      return `${h}:${m}:${s}`;
+    }
+
+    // Update timers
+    function startTimers(email) {
+      ["smoke", "drink"].forEach(type => {
+        const el = document.getElementById(`${type}-${email}`);
+        const refPath = ref(db, `timers/${btoa(email)}/${type}`);
+        onValue(refPath, (snap) => {
+          const lastTime = snap.val();
+          if (!lastTime) {
+            el.textContent = "--:--:--";
+            return;
+          }
+          setInterval(() => {
+            const elapsed = Date.now() - lastTime;
+            el.textContent = formatElapsed(elapsed);
+          }, 1000);
+        });
+      });
+    }
+
+    Object.keys(users).forEach(email => startTimers(email));
+
+    // Auth events
+    loginBtn.onclick = async () => {
+      const email = document.getElementById("email").value;
+      const pass = document.getElementById("password").value;
+      try {
+        await signInWithEmailAndPassword(auth, email, pass);
+      } catch (e) {
+        alert(e.message);
+      }
+    };
+
+    logoutBtn.onclick = () => signOut(auth);
+
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        loginStatus.textContent = `Logged in as ${user.email}`;
+        loginBtn.classList.add("hidden");
+        logoutBtn.classList.remove("hidden");
+
+        // Show reset inputs/buttons only for this user
+        const email = user.email;
+        ["smoke", "drink"].forEach(type => {
+          document.getElementById(`${type}-input-${email}`).classList.remove("hidden");
+          const btn = document.getElementById(`${type}-btn-${email}`);
+          btn.classList.remove("hidden");
+
+          btn.onclick = () => {
+            const datetime = document.getElementById(`${type}-input-${email}`).value;
+            if (datetime) {
+              const timestamp = new Date(datetime).getTime();
+              set(ref(db, `timers/${btoa(email)}/${type}`), timestamp);
+            }
+          };
+        });
+
+      } else {
+        loginStatus.textContent = "Not logged in";
+        loginBtn.classList.remove("hidden");
+        logoutBtn.classList.add("hidden");
+      }
+    });
+  </script>
+</body>
+</html>
